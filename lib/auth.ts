@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 
-const secretKey = 'super_secret_dev_key_only_for_study'
+const secretKey = process.env.SESSION_SECRET ?? 'super_secret_dev_key_only_for_study_fallback'
 const encodedKey = new TextEncoder().encode(secretKey)
 
 export async function createSession(userId: string) {
