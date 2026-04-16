@@ -1,66 +1,44 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import Link from 'next/link'
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '600px', padding: '60px 40px', textAlign: 'center' }}>
+        
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.1)',
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 24px auto',
+          border: '1px solid rgba(99, 102, 241, 0.3)'
+        }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '16px', fontWeight: 700 }}>Time Tracker</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', marginBottom: '40px', lineHeight: 1.6 }}>
+          O sistema definitivo para você registrar e gerenciar sua jornada de estudos ou trabalho com uma interface linda e moderna.
+        </p>
+
+        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+          <Link href="/login" style={{ flex: 1, maxWidth: '200px' }}>
+            <button className="btn-primary">Entrar no Sistema</button>
+          </Link>
+          <Link href="/registro" style={{ flex: 1, maxWidth: '200px' }}>
+            <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }}>
+              Criar Conta
+            </button>
+          </Link>
         </div>
-      </main>
+
+      </div>
     </div>
-  );
+  )
 }
