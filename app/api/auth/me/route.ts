@@ -15,7 +15,8 @@ export async function GET() {
       select: { 
         id: true, name: true, email: true, 
         profilePic: true, country: true, state: true, 
-        city: true, zipcode: true, street: true, number: true 
+        city: true, zipcode: true, street: true, number: true,
+        role: true, weeklyHours: true
       },
     })
 
@@ -63,7 +64,8 @@ export async function PUT(request: Request) {
       select: {
         id: true, name: true, email: true,
         profilePic: true, country: true, state: true,
-        city: true, zipcode: true, street: true, number: true
+        city: true, zipcode: true, street: true, number: true,
+        role: true, weeklyHours: true
       }
     })
 

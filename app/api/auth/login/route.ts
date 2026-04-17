@@ -26,7 +26,10 @@ export async function POST(request: Request) {
 
     await createSession(user.id)
 
-    return NextResponse.json({ message: 'Login realizado com sucesso!' })
+    return NextResponse.json({ 
+      message: 'Login realizado com sucesso!',
+      user: { role: user.role }
+    })
   } catch (error) {
     console.error('Error in login:', error)
     return NextResponse.json({ error: 'Erro interno no servidor.' }, { status: 500 })

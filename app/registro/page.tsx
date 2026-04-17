@@ -29,7 +29,7 @@ export default function RegisterPage() {
       if (!res.ok) {
         setError(data.error || 'Ocorreu um erro no cadastro.')
       } else {
-        router.push('/dashboard')
+        router.push('/admin')
         router.refresh()
       }
     } catch (err) {

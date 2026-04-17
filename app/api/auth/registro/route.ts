@@ -12,6 +12,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nenhum campo pode estar vazio.' }, { status: 400 })
     }
 
+    const userCount = await prisma.user.count()
+
+    if (userCount > 0) {
+      return NextResponse.json({ error: 'Cadastro bloqueado. Apenas o administrador pode criar novas contas.' }, { status: 403 })
+    }
+
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
       return NextResponse.json({ error: 'E-mail já está em uso.' }, { status: 400 })
@@ -24,12 +30,13 @@ export async function POST(request: Request) {
         name,
         email,
         password: hashedPassword,
+        role: 'ADMIN', // The first user is the ADMIN
       },
     })
 
     await createSession(user.id)
 
-    return NextResponse.json({ message: 'Conta criada com sucesso!' }, { status: 201 })
+    return NextResponse.json({ message: 'Conta de Administrador criada com sucesso!' }, { status: 201 })
   } catch (error) {
     console.error('Error in registro:', error)
     return NextResponse.json({ error: 'Erro interno no servidor.' }, { status: 500 })
