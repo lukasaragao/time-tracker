@@ -26,6 +26,35 @@ export default function DashboardPage() {
   const [filterType, setFilterType] = useState<string>('all') // 'all', '3', '7', '15', '30', 'custom'
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
+  const [theme, setTheme] = useState<string>('system')
+
+  // Initialize theme 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'system'
+    setTheme(savedTheme)
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('theme')) {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light')
+      }
+    }
+    
+    mediaQuery.addEventListener('change', handleSystemThemeChange)
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange)
+  }, [])
+
+  const changeTheme = (newTheme: string) => {
+    setTheme(newTheme)
+    if (newTheme === 'system') {
+      localStorage.removeItem('theme')
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    } else {
+      localStorage.setItem('theme', newTheme)
+      document.documentElement.setAttribute('data-theme', newTheme)
+    }
+  }
 
   // Relógio em tempo real
   useEffect(() => {
@@ -159,14 +188,35 @@ export default function DashboardPage() {
     <div style={{ flex: 1, padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       
       {/* Navbar Superior */}
-      <div style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+      <div style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', gap: '20px', flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Olá, {user?.name}</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</p>
         </div>
-        <button onClick={handleLogout} style={{ background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '6px 16px', borderRadius: '6px', cursor: 'pointer' }}>
-          Sair
-        </button>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <select 
+            value={theme}
+            onChange={(e) => changeTheme(e.target.value)}
+            style={{ 
+              background: 'var(--glass-bg)', 
+              color: 'var(--text-primary)', 
+              border: '1px solid var(--glass-border)', 
+              padding: '6px 12px', 
+              borderRadius: '6px',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="system" style={{ color: '#000' }}>Automático</option>
+            <option value="light" style={{ color: '#000' }}>Claro</option>
+            <option value="dark" style={{ color: '#000' }}>Escuro</option>
+          </select>
+          
+          <button onClick={handleLogout} style={{ background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '6px 16px', borderRadius: '6px', cursor: 'pointer' }}>
+            Sair
+          </button>
+        </div>
       </div>
 
       {/* Seção Principal - Relógio e Botão */}

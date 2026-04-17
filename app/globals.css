@@ -18,6 +18,25 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --glass-blur: blur(12px);
+
+  --body-gradient: radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                   radial-gradient(at 50% 0%, hsla(225,39%,30%,0.2) 0, transparent 50%), 
+                   radial-gradient(at 100% 0%, hsla(339,49%,30%,0.2) 0, transparent 50%);
+}
+
+[data-theme='light'] {
+  --bg-primary: #f1f5f9;
+  --bg-secondary: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+
+  --body-gradient: radial-gradient(at 0% 0%, hsla(253, 50%, 90%, 1) 0, transparent 50%), 
+                   radial-gradient(at 50% 0%, hsla(225, 60%, 95%, 0.8) 0, transparent 50%), 
+                   radial-gradient(at 100% 0%, hsla(339, 60%, 90%, 0.5) 0, transparent 50%);
 }
 
 * {
@@ -32,13 +51,11 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   /* Fundo sutil com um Glow/Gradient para não ficar preto puro */
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.2) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.2) 0, transparent 50%);
+  background-image: var(--body-gradient);
   background-attachment: fixed;
   display: flex;
   flex-direction: column;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 a {
