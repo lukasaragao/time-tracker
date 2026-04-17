@@ -28,8 +28,12 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.error || 'Ocorreu um erro.')
       } else {
-        // Redireciona para o painel em caso de sucesso
-        router.push('/dashboard')
+        // Redireciona com base no cargo
+        if (data.user?.role === 'ADMIN') {
+          router.push('/admin')
+        } else {
+          router.push('/dashboard')
+        }
         router.refresh()
       }
     } catch (err) {

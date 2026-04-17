@@ -7,6 +7,7 @@ interface User {
   id: string
   name: string
   email: string
+  role: string
   profilePic?: string
   country?: string
   state?: string
@@ -506,11 +507,33 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '10px' }}>
-                <button type="button" onClick={() => setIsConfigOpen(false)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancelar</button>
-                <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={isSaving}>
-                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', gap: '10px', alignItems: 'center' }}>
+                <div>
+                  {user?.role === 'ADMIN' && (
+                    <button 
+                      type="button" 
+                      onClick={() => router.push('/admin')} 
+                      style={{ 
+                        padding: '10px 18px', 
+                        borderRadius: '8px', 
+                        border: '1px solid var(--accent-color)', 
+                        background: 'rgba(99, 102, 241, 0.1)', 
+                        color: 'var(--accent-color)', 
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      🛡️ Portal Administrativo
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" onClick={() => setIsConfigOpen(false)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancelar</button>
+                  <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={isSaving}>
+                    {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -19,6 +19,8 @@ model User {
   zipcode     String?
   street      String?
   number      String?
+  role        String      @default("USER") // "USER" ou "ADMIN"
+  weeklyHours Float       @default(44.0)
   createdAt   DateTime    @default(now())
   
   timeEntries TimeEntry[]

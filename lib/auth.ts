@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { prisma } from './prisma'
 
 const secretKey = process.env.SESSION_SECRET ?? 'super_secret_dev_key_only_for_study_fallback'
 const encodedKey = new TextEncoder().encode(secretKey)
@@ -40,4 +41,16 @@ export async function getUserFromSession() {
 export async function deleteSession() {
   const cookieStore = await cookies()
   cookieStore.delete('session')
+}
+
+export async function isAdmin() {
+  const userId = await getUserFromSession()
+  if (!userId) return false
+  
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true }
+  })
+  
+  return user?.role === 'ADMIN'
 }
