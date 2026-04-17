@@ -44,11 +44,25 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
-    const limit = limitParam ? parseInt(limitParam, 10) : 50
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined
+    const startDate = searchParams.get('startDate')
+    const endDate = searchParams.get('endDate')
+
+    const whereClause: any = { userId }
+    if (startDate || endDate) {
+      whereClause.timestamp = {}
+      if (startDate) whereClause.timestamp.gte = new Date(startDate)
+      if (endDate) {
+        // Adjust endDate to the end of the day if it's just a date string
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        whereClause.timestamp.lte = end
+      }
+    }
 
     // Busca os registros de forma decrescente
     const entries = await prisma.timeEntry.findMany({
-      where: { userId },
+      where: whereClause,
       orderBy: { timestamp: 'desc' },
       take: limit,
     })
