@@ -7,6 +7,13 @@ interface User {
   id: string
   name: string
   email: string
+  profilePic?: string
+  country?: string
+  state?: string
+  city?: string
+  zipcode?: string
+  street?: string
+  number?: string
 }
 
 interface TimeEntry {
@@ -27,6 +34,11 @@ export default function DashboardPage() {
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [theme, setTheme] = useState<string>('system')
+
+  // Config Modal
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [configData, setConfigData] = useState<Partial<User> & { password?: string }>({})
+  const [isSaving, setIsSaving] = useState(false)
 
   // Initialize theme 
   useEffect(() => {
@@ -71,7 +83,6 @@ export default function DashboardPage() {
         const days = parseInt(filterType, 10)
         const start = new Date()
         start.setDate(start.getDate() - days)
-        // Reset to midnight
         start.setHours(0, 0, 0, 0)
         queryParams.append('startDate', start.toISOString())
       } else if (filterType === 'custom') {
@@ -130,6 +141,68 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
+  const handleCepBlur = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '')
+    if (cleanCep.length === 8) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+        const data = await res.json()
+        if (!data.erro) {
+          setConfigData(prev => ({
+            ...prev,
+            street: data.logradouro,
+            city: data.localidade,
+            state: data.uf,
+            country: prev.country || 'Brasil'
+          }))
+        }
+      } catch (e) {
+        console.error("Erro ao buscar CEP:", e)
+      }
+    }
+  }
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
+    try {
+      const res = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configData)
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setUser(data.user)
+        setIsConfigOpen(false)
+        setConfigData({})
+      } else {
+        alert(data.error || 'Erro ao atualizar configurações')
+      }
+    } catch (e) {
+      alert('Erro inesperado')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const openConfig = () => {
+    if (user) {
+      setConfigData({
+        name: user.name,
+        email: user.email,
+        profilePic: user.profilePic || '',
+        country: user.country || '',
+        state: user.state || '',
+        city: user.city || '',
+        zipcode: user.zipcode || '',
+        street: user.street || '',
+        number: user.number || ''
+      })
+      setIsConfigOpen(true)
+    }
+  }
+
   // Agrupamento por dia e cálculo de horas
   const groupedEntries = useMemo(() => {
     const groups: { [key: string]: TimeEntry[] } = {}
@@ -151,7 +224,6 @@ export default function DashboardPage() {
     return sortedKeys.map(key => {
       const dayEntries = groups[key].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
       
-      // Calculate daily total
       let totalMs = 0
       let startMs: number | null = null
       
@@ -164,7 +236,6 @@ export default function DashboardPage() {
         }
       }
 
-      // Format total hours
       const totalHours = Math.floor(totalMs / (1000 * 60 * 60))
       const totalMins = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60))
       
@@ -185,34 +256,41 @@ export default function DashboardPage() {
   const isWorking = lastEntry?.type === 'ENTRADA'
 
   return (
-    <div style={{ flex: 1, padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div style={{ flex: 1, padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
       
       {/* Navbar Superior */}
       <div style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', gap: '20px', flexWrap: 'wrap' }}>
-        <div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Olá, {user?.name}</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</p>
+        
+        <div 
+          onClick={openConfig} 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '15px', 
+            cursor: 'pointer',
+            padding: '8px 16px',
+            borderRadius: '12px',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            transition: 'all 0.2s'
+          }}
+          className="hover:scale-105"
+        >
+          {user?.profilePic ? (
+            <img src={user.profilePic} alt="Perfil" style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: 'var(--accent-color)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}>
+              {user?.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Olá, {user?.name}</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</p>
+          </div>
+          <span style={{ marginLeft: '10px', fontSize: '1.2rem', opacity: 0.5 }}>⚙️</span>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <select 
-            value={theme}
-            onChange={(e) => changeTheme(e.target.value)}
-            style={{ 
-              background: 'var(--glass-bg)', 
-              color: 'var(--text-primary)', 
-              border: '1px solid var(--glass-border)', 
-              padding: '6px 12px', 
-              borderRadius: '6px',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="system" style={{ color: '#000' }}>Automático</option>
-            <option value="light" style={{ color: '#000' }}>Claro</option>
-            <option value="dark" style={{ color: '#000' }}>Escuro</option>
-          </select>
-          
           <button onClick={handleLogout} style={{ background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '6px 16px', borderRadius: '6px', cursor: 'pointer' }}>
             Sair
           </button>
@@ -336,6 +414,108 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Configurações (Settings Modal) */}
+      {isConfigOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', background: 'var(--bg-secondary)', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Configurações da Conta</h2>
+              <button onClick={() => setIsConfigOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+            </div>
+
+            {/* Mudança de Tema por Ícones */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', marginBottom: '30px', padding: '15px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+              <div style={{ fontWeight: 600 }}>Tema:</div>
+              <button onClick={() => changeTheme('light')} style={{ background: theme === 'light' ? 'var(--accent-color)' : 'transparent', color: theme === 'light' ? '#fff' : 'var(--text-primary)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', transition: 'all 0.2s' }} title="Claro">
+                ☀️
+              </button>
+              <button onClick={() => changeTheme('dark')} style={{ background: theme === 'dark' ? 'var(--accent-color)' : 'transparent', color: theme === 'dark' ? '#fff' : 'var(--text-primary)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', transition: 'all 0.2s' }} title="Escuro">
+                🌙
+              </button>
+              <button onClick={() => changeTheme('system')} style={{ background: theme === 'system' ? 'var(--accent-color)' : 'transparent', color: theme === 'system' ? '#fff' : 'var(--text-primary)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', transition: 'all 0.2s' }} title="Automático">
+                💻
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveConfig} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Nome</label>
+                  <input type="text" className="input-field" value={configData.name || ''} onChange={(e) => setConfigData({...configData, name: e.target.value})} required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>E-mail</label>
+                  <input type="email" className="input-field" value={configData.email || ''} onChange={(e) => setConfigData({...configData, email: e.target.value})} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Nova Senha</label>
+                  <input type="password" placeholder="Deixe em branco p/ não alterar" className="input-field" value={configData.password || ''} onChange={(e) => setConfigData({...configData, password: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Url Foto de Perfil</label>
+                  <input type="text" placeholder="https://..." className="input-field" value={configData.profilePic || ''} onChange={(e) => setConfigData({...configData, profilePic: e.target.value})} />
+                </div>
+              </div>
+
+              <h3 style={{ fontSize: '1.2rem', marginTop: '10px', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px' }}>Endereço</h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>CEP</label>
+                  <input type="text" className="input-field" placeholder="00000-000" value={configData.zipcode || ''} onChange={(e) => setConfigData({...configData, zipcode: e.target.value})} onBlur={(e) => handleCepBlur(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>País</label>
+                  <input type="text" className="input-field" value={configData.country || ''} onChange={(e) => setConfigData({...configData, country: e.target.value})} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Cidade</label>
+                  <input type="text" className="input-field" value={configData.city || ''} onChange={(e) => setConfigData({...configData, city: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Estado</label>
+                  <input type="text" className="input-field" value={configData.state || ''} onChange={(e) => setConfigData({...configData, state: e.target.value})} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Rua</label>
+                  <input type="text" className="input-field" value={configData.street || ''} onChange={(e) => setConfigData({...configData, street: e.target.value})} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)' }}>Número</label>
+                  <input type="text" className="input-field" value={configData.number || ''} onChange={(e) => setConfigData({...configData, number: e.target.value})} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '10px' }}>
+                <button type="button" onClick={() => setIsConfigOpen(false)} style={{ padding: '12px 24px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancelar</button>
+                <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={isSaving}>
+                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   )
