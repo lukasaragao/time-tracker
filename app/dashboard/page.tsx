@@ -101,7 +101,7 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
-  // Agrupamento por dia
+  // Agrupamento por dia e cálculo de horas
   const groupedEntries = useMemo(() => {
     const groups: { [key: string]: TimeEntry[] } = {}
     entries.forEach(entry => {
@@ -112,7 +112,6 @@ export default function DashboardPage() {
     
     // Sort keys descending
     const sortedKeys = Object.keys(groups).sort((a, b) => {
-      // a and b are in format DD/MM/YYYY
       const [dayA, monthA, yearA] = a.split('/')
       const [dayB, monthB, yearB] = b.split('/')
       const dateA = new Date(Number(yearA), Number(monthA) - 1, Number(dayA))
@@ -120,10 +119,32 @@ export default function DashboardPage() {
       return dateB.getTime() - dateA.getTime()
     })
 
-    return sortedKeys.map(key => ({
-      date: key,
-      entries: groups[key].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    }))
+    return sortedKeys.map(key => {
+      const dayEntries = groups[key].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      
+      // Calculate daily total
+      let totalMs = 0
+      let startMs: number | null = null
+      
+      for (const entry of dayEntries) {
+        if (entry.type === 'ENTRADA') {
+          startMs = new Date(entry.timestamp).getTime()
+        } else if (entry.type === 'SAIDA' && startMs !== null) {
+          totalMs += new Date(entry.timestamp).getTime() - startMs
+          startMs = null
+        }
+      }
+
+      // Format total hours
+      const totalHours = Math.floor(totalMs / (1000 * 60 * 60))
+      const totalMins = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60))
+      
+      return {
+        date: key,
+        entries: dayEntries,
+        totalTimeFormatted: `${totalHours.toString().padStart(2, '0')}:${totalMins.toString().padStart(2, '0')}h`
+      }
+    })
   }, [entries])
 
   if (loading) {
@@ -222,9 +243,14 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {groupedEntries.map((group) => (
               <div key={group.date} className="glass-panel" style={{ padding: '20px' }}>
-                <h4 style={{ marginBottom: '15px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px' }}>
-                  {group.date}
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid var(--glass-border)', paddingBottom: '10px' }}>
+                  <h4 style={{ color: 'var(--text-secondary)', margin: 0 }}>
+                    {group.date}
+                  </h4>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--success)', fontWeight: 600, background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '12px' }}>
+                    Total trabalhado: {group.totalTimeFormatted}
+                  </span>
+                </div>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '15px' }}>
                   {group.entries.map((entry) => (
