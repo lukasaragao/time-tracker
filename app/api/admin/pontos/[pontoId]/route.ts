@@ -13,11 +13,19 @@ export async function PUT(request: Request, context: any) {
     const body = await request.json()
     const { type, timestamp } = body
 
+    let entryDate: Date | undefined = undefined
+    if (timestamp) {
+      entryDate = new Date(timestamp)
+      if (entryDate > new Date()) {
+        return NextResponse.json({ error: 'Não é permitido registrar pontos em horários futuros' }, { status: 400 })
+      }
+    }
+
     const entry = await prisma.timeEntry.update({
       where: { id: pontoId },
       data: {
         type,
-        timestamp: timestamp ? new Date(timestamp) : undefined
+        timestamp: entryDate
       }
     })
 

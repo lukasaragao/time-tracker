@@ -27,6 +27,11 @@ export default function AdminPage() {
   const [viewingUser, setViewingUser] = useState<User | null>(null)
   const [userEntries, setUserEntries] = useState<TimeEntry[]>([])
   
+  // Filtros
+  const [filterType, setFilterType] = useState<string>('all') // 'all', '3', '7', '15', '30', 'custom'
+  const [customStartDate, setCustomStartDate] = useState<string>('')
+  const [customEndDate, setCustomEndDate] = useState<string>('')
+
   // Modais
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<Partial<User> & { password?: string } | null>(null)
@@ -76,8 +81,25 @@ export default function AdminPage() {
 
   const handleSelectUser = async (user: User) => {
     setViewingUser(user)
+    fetchUserPoints(user.id)
+  }
+
+  const fetchUserPoints = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/pontos?userId=${user.id}`)
+      const queryParams = new URLSearchParams({ userId })
+      
+      if (filterType !== 'all' && filterType !== 'custom') {
+        const days = parseInt(filterType, 10)
+        const start = new Date()
+        start.setDate(start.getDate() - days)
+        start.setHours(0, 0, 0, 0)
+        queryParams.append('startDate', start.toISOString())
+      } else if (filterType === 'custom') {
+        if (customStartDate) queryParams.append('startDate', new Date(customStartDate).toISOString())
+        if (customEndDate) queryParams.append('endDate', new Date(customEndDate).toISOString())
+      }
+
+      const res = await fetch(`/api/admin/pontos?${queryParams.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setUserEntries(data.data)
@@ -86,6 +108,12 @@ export default function AdminPage() {
       console.error(err)
     }
   }
+
+  useEffect(() => {
+    if (viewingUser) {
+      fetchUserPoints(viewingUser.id)
+    }
+  }, [filterType, customStartDate, customEndDate])
 
   const handleCreateUser = () => {
     setEditingUser({ name: '', email: '', password: '', role: 'USER', weeklyHours: 44 })
@@ -140,7 +168,7 @@ export default function AdminPage() {
   // Ponto Management
   const handleAddPoint = () => {
     const now = new Date()
-    // format as YYYY-MM-DDTHH:MM
+    // format as YYYY-MM-DDTHH:MM local
     const localNow = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
     setEditingPoint({ type: 'ENTRADA', timestamp: localNow })
     setIsPointModalOpen(true)
@@ -155,9 +183,25 @@ export default function AdminPage() {
 
   const handleSavePoint = async () => {
     if (!editingPoint || !viewingUser) return
+    
+    // Validar ponto futuro
+    const selectedDate = new Date(editingPoint.timestamp)
+    const now = new Date()
+    if (selectedDate > now) {
+      alert('Não é permitido registrar pontos em horários futuros.')
+      return
+    }
+
     const method = editingPoint.id ? 'PUT' : 'POST'
     const url = editingPoint.id ? `/api/admin/pontos/${editingPoint.id}` : `/api/admin/pontos`
-    const body = { ...editingPoint, userId: viewingUser.id }
+    
+    // Para resolver o problema da hora errada, vamos garantir que enviamos um ISO string correto
+    // O datetime-local usa o fuso local, então 'new Date(editingPoint.timestamp)' irá usar o fuso do navegador.
+    const body = { 
+      ...editingPoint, 
+      timestamp: selectedDate.toISOString(), // Envia como UTC para o servidor
+      userId: viewingUser.id 
+    }
 
     try {
       const res = await fetch(url, {
@@ -168,6 +212,9 @@ export default function AdminPage() {
       if (res.ok) {
         setIsPointModalOpen(false)
         handleSelectUser(viewingUser)
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Erro ao salvar ponto')
       }
     } catch (err) {
       alert('Erro ao salvar ponto')
@@ -192,44 +239,89 @@ export default function AdminPage() {
     setIsConfirmModalOpen(true)
   }
 
-  // Cálculo de horas trabalhadas no período para o usuário selecionado
-  const totalWorked = useMemo(() => {
-    if (!userEntries.length) return "00:00h"
+  // Agrupamento por dia (Mesma lógica da Dashboard)
+  const groupedEntries = useMemo(() => {
+    const groups: { [key: string]: TimeEntry[] } = {}
+    userEntries.forEach(entry => {
+      const dateKey = new Date(entry.timestamp).toLocaleDateString('pt-BR')
+      if (!groups[dateKey]) groups[dateKey] = []
+      groups[dateKey].push(entry)
+    })
     
-    // Simplificado: ordena e calcula pares
-    const sorted = [...userEntries].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    let ms = 0
-    let lastIn: number | null = null
-    
-    sorted.forEach(e => {
-      if (e.type === 'ENTRADA') lastIn = new Date(e.timestamp).getTime()
-      else if (e.type === 'SAIDA' && lastIn) {
-        ms += new Date(e.timestamp).getTime() - lastIn
-        lastIn = null
-      }
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      const [dayA, monthA, yearA] = a.split('/')
+      const [dayB, monthB, yearB] = b.split('/')
+      const dateA = new Date(Number(yearA), Number(monthA) - 1, Number(dayA))
+      const dateB = new Date(Number(yearB), Number(monthB) - 1, Number(dayB))
+      return dateB.getTime() - dateA.getTime()
     })
 
-    const h = Math.floor(ms / 3600000)
-    const m = Math.floor((ms % 3600000) / 60000)
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}h`
+    return sortedKeys.map(key => {
+      const dayEntries = groups[key].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      
+      let totalMs = 0
+      let startMs: number | null = null
+      
+      for (const entry of dayEntries) {
+        if (entry.type === 'ENTRADA') {
+          startMs = new Date(entry.timestamp).getTime()
+        } else if (entry.type === 'SAIDA' && startMs !== null) {
+          totalMs += new Date(entry.timestamp).getTime() - startMs
+          startMs = null
+        }
+      }
+
+      const totalHours = Math.floor(totalMs / (1000 * 60 * 60))
+      const totalMins = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60))
+      
+      return {
+        date: key,
+        entries: dayEntries,
+        totalTimeFormatted: `${totalHours.toString().padStart(2, '0')}:${totalMins.toString().padStart(2, '0')}h`
+      }
+    })
   }, [userEntries])
+
+  // Cálculo total no período filtrado
+  const totalWorked = useMemo(() => {
+    let totalMs = 0
+    groupedEntries.forEach(group => {
+      const match = group.totalTimeFormatted.match(/(\d+):(\d+)h/)
+      if (match) {
+        totalMs += (parseInt(match[1]) * 3600000) + (parseInt(match[2]) * 60000)
+      }
+    })
+    const h = Math.floor(totalMs / 3600000)
+    const m = Math.floor((totalMs % 3600000) / 60000)
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}h`
+  }, [groupedEntries])
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/login')
+  }
 
   if (loading) return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>Carregando Portal Admin...</div>
 
+  const maxDateTime = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
+
   return (
-    <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+    <div className="admin-container" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 700 }}>Painel Administrativo</h1>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 700 }}>Painel Administrativo</h1>
           <p style={{ color: 'var(--text-secondary)' }}>Gestão de Funcionários e Carga Horária</p>
         </div>
-        <button onClick={() => router.push('/dashboard')} className="btn-secondary" style={{ width: 'auto', padding: '10px 20px' }}>Ir para Minha Dashboard</button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={() => router.push('/dashboard')} className="btn-secondary" style={{ width: 'auto', padding: '10px 20px' }}>Dashboard</button>
+          <button onClick={handleLogout} style={{ background: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Sair</button>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px' }}>
+      <div className="admin-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '30px' }}>
         
         {/* Lista de Usuários */}
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        <div className="glass-panel" style={{ padding: '20px', maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '1.1rem' }}>Funcionários</h3>
             <button onClick={handleCreateUser} style={{ background: 'var(--success)', color: '#fff', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '1.2rem' }}>+</button>
@@ -266,13 +358,13 @@ export default function AdminPage() {
         </div>
 
         {/* Detalhes do Usuário Selecionado */}
-        <div className="glass-panel" style={{ padding: '30px' }}>
+        <div className="glass-panel" style={{ padding: '20px' }}>
           {viewingUser ? (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>{viewingUser.name}</h2>
-                  <p style={{ color: 'var(--text-secondary)' }}>{viewingUser.email}</p>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 600 }}>{viewingUser.name}</h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{viewingUser.email}</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--success)' }}>{totalWorked}</div>
@@ -280,27 +372,81 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* Filtros de Histórico */}
+              <div style={{ marginBottom: '25px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                  {['all', '3', '7', '15', '30', 'custom'].map(type => (
+                    <button 
+                      key={type}
+                      className="btn-secondary" 
+                      onClick={() => setFilterType(type)} 
+                      style={{ 
+                        padding: '6px 12px', 
+                        fontSize: '0.75rem',
+                        background: filterType === type ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.05)', 
+                        color: filterType === type ? '#fff' : 'var(--text-secondary)', 
+                        border: 'none', 
+                        borderRadius: '6px', 
+                        cursor: 'pointer' 
+                      }}
+                    >
+                      {type === 'all' ? 'Tudo' : type === 'custom' ? 'Período' : `${type} dias`}
+                    </button>
+                  ))}
+                </div>
+
+                {filterType === 'custom' && (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap' }}>
+                    <input 
+                      type="date" 
+                      value={customStartDate} 
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="input-field"
+                      style={{ padding: '8px', fontSize: '0.8rem' }}
+                    />
+                    <span style={{ fontSize: '0.8rem' }}>até</span>
+                    <input 
+                      type="date" 
+                      value={customEndDate} 
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="input-field"
+                      style={{ padding: '8px', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>Registros de Pontos</h4>
+                <h4 style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>Histórico Registrado</h4>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button onClick={handleAddPoint} style={{ background: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: '4px', padding: '5px 12px', fontSize: '0.8rem', cursor: 'pointer' }}>+ Add Ponto</button>
-                  <button onClick={() => { setEditingUser(viewingUser); setIsUserModalOpen(true); }} className="btn-secondary" style={{ width: 'auto', padding: '6px 15px', fontSize: '0.8rem' }}>Editar Perfil</button>
+                  <button onClick={() => { setEditingUser(viewingUser); setIsUserModalOpen(true); }} className="btn-secondary" style={{ width: 'auto', padding: '6px 15px', fontSize: '0.8rem' }}>Perfil</button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {userEntries.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.1)', borderRadius: '10px' }}>Nenhum ponto registrado.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {groupedEntries.length === 0 ? (
+                  <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.1)', borderRadius: '10px' }}>Nenhum ponto encontrado.</div>
                 ) : (
-                  userEntries.map(e => (
-                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
-                      <div>
-                        <span style={{ color: e.type === 'ENTRADA' ? 'var(--success)' : 'var(--danger)', fontWeight: 600, fontSize: '0.8rem', marginRight: '15px' }}>{e.type}</span>
-                        <span style={{ fontWeight: 500 }}>{new Date(e.timestamp).toLocaleString('pt-BR')}</span>
+                  groupedEntries.map(group => (
+                    <div key={group.date} style={{ border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '15px', background: 'rgba(255,255,255,0.01)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid var(--glass-border)', paddingBottom: '8px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{group.date}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600 }}>{group.totalTimeFormatted}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => handleEditPoint(e)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>✏️</button>
-                        <button onClick={() => handleDeletePoint(e.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {group.entries.map(e => (
+                          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                              <span style={{ color: e.type === 'ENTRADA' ? 'var(--success)' : 'var(--danger)', fontWeight: 600, fontSize: '0.7rem' }}>{e.type}</span>
+                              <span style={{ fontSize: '0.9rem' }}>{new Date(e.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              <button onClick={() => handleEditPoint(e)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem' }}>✏️</button>
+                              <button onClick={() => handleDeletePoint(e.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem' }}>🗑️</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))
@@ -308,17 +454,28 @@ export default function AdminPage() {
               </div>
             </div>
           ) : (
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+            <div style={{ height: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
               <div style={{ fontSize: '3rem', marginBottom: '10px' }}>👥</div>
-              <p>Selecione um funcionário para ver detalhes</p>
+              <p>Selecione um funcionário</p>
             </div>
           )}
         </div>
       </div>
 
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .admin-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .admin-container {
+            padding: 10px !important;
+          }
+        }
+      `}</style>
+
       {/* Modal de Confirmação de Exclusão */}
       {isConfirmModalOpen && confirmConfig && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '30px', background: 'var(--bg-secondary)', textAlign: 'center' }}>
             <div style={{ fontSize: '3rem', marginBottom: '15px' }}>⚠️</div>
             <h3 style={{ marginBottom: '15px' }}>Confirmar Exclusão</h3>
@@ -333,10 +490,10 @@ export default function AdminPage() {
 
       {/* Modal de Ponto */}
       {isPointModalOpen && editingPoint && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '30px', background: 'var(--bg-secondary)', position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>{editingPoint.id ? 'Editar Ponto' : 'Novo Ponto'}</h2>
+              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>{editingPoint.id ? 'Editar Ponto' : 'Novo Ponto'}</h2>
               <button 
                 onClick={() => setIsPointModalOpen(false)} 
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer', padding: '5px' }}
@@ -345,14 +502,17 @@ export default function AdminPage() {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Tipo de Ponto</label>
               <select className="input-field" value={editingPoint.type} onChange={e => setEditingPoint({...editingPoint, type: e.target.value})}>
                 <option value="ENTRADA">ENTRADA</option>
                 <option value="SAIDA">SAÍDA</option>
               </select>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Data e Horário</label>
               <input 
                 type="datetime-local" 
                 className="input-field" 
                 value={editingPoint.timestamp} 
+                max={maxDateTime}
                 onChange={e => setEditingPoint({...editingPoint, timestamp: e.target.value})} 
               />
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -366,10 +526,10 @@ export default function AdminPage() {
 
       {/* Modal de Criação/Edição de Usuário */}
       {isUserModalOpen && editingUser && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '30px', background: 'var(--bg-secondary)', position: 'relative' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '30px', background: 'var(--bg-secondary)', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>{editingUser.id ? 'Editar Funcionário' : 'Novo Funcionário'}</h2>
+              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>{editingUser.id ? 'Editar Funcionário' : 'Novo Funcionário'}</h2>
               <button 
                 onClick={() => setIsUserModalOpen(false)} 
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer', padding: '5px' }}

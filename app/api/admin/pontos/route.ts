@@ -51,11 +51,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
     }
 
+    const entryDate = new Date(timestamp)
+    if (entryDate > new Date()) {
+      return NextResponse.json({ error: 'Não é permitido registrar pontos em horários futuros' }, { status: 400 })
+    }
+
     const entry = await prisma.timeEntry.create({
       data: {
         userId,
         type,
-        timestamp: new Date(timestamp)
+        timestamp: entryDate
       }
     })
 
